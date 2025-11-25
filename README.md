@@ -10,3 +10,8 @@ MATLAB <br>
 
 Python<br>
 **JMLR 001**: Plots $p(z)$ for visually verifying acquiescense of a function, input $p(z)$ using roots of polynomial or it's coefficients
+
+Developed by **[Akshaj Aithal](https://github.com/Akshaj0712)**.
+
+This project is based on:
+- Research literature from Hardt, M., Ma, T., & Recht, B. (2018). [Gradient descent learns linear dynamical systems.](https://jmlr.org/papers/volume19/16-465/16-465.pdf) Journal of Machine Learning Research, 19(29) 
