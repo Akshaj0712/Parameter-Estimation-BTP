@@ -8,5 +8,5 @@ MATLAB <br>
 **Had_et_al_test_simulate_data**: Simulates the system response to given $G(z)$ for using $(a,B,C,D)$ <br>
 **Had_et_al_test_impulse_response**: For a given $G(z)$ outputs the l2 norm of the impulse response, to validate if $|r|$ is greater than the offset $D$<br>
 
-Python
+Python<br>
 **JMLR 001**: Plots $p(z)$ for visually verifying acquiescense of a function, input $p(z)$ using roots of polynomial or it's coefficients
