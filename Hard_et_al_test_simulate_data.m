@@ -1,48 +1,61 @@
-% Parameters
-N = 2e6;      % number of time steps
+% Simulation: produce numSeqs sequences, each of length T (h0 = 0)
+rng(0);               % for reproducibility (optional)
 
-n=2;
-a = [0.09 0]; A = [ [zeros(n-1,1) eye(n-1)]; -flipud(a) ]
-disp(size(A))
+% --- User parameters ---
+numSeqs = 2e5;        % number of sequences (set N here)
+T = 500;              % length of each sequence
+% -----------------------
+
+% System definition (kept from your code)
+n = 2;
+a = [0.09 0];
+A = [ [zeros(n-1,1) eye(n-1)]; a ];
 B = zeros(n, 1); B(n) = 1;
-C = [0.6,0.8]
+C = [0.6, 0.8];
 D = 1;
 
-n = size(A,1);   % state dimension
-m = size(B,2);   % input dimension
-p = size(C,1);   % output dimension
+% dims
+n = size(A,1);
+m = size(B,2);
+p = size(C,1);
 
-% Preallocate
-yt  = zeros(p, N);
-xt  = zeros(m, N);
+% preallocate 3-D arrays: (dimension x time x sequence)
+xt = zeros(m, T, numSeqs);
+yt = zeros(p, T, numSeqs);
+ht = zeros(n, T, numSeqs);   % will store h1...hT for each sequence
 
-% Initial state
-h = zeros(n,1);        % h0
+% simulation loop
+tic;
+for j = 1:numSeqs
+    % initial state h0 = 0
+    h = zeros(n,1);
+    for t = 1:T
+        % generate gaussian noise and normalize to l2-norm = 0.5
+        x = randn(m,1);
+        x = 0.5 * x / norm(x);
 
-tic
-for t = 1:N
-    if(mod(t,1e6)==0)
-        disp(t)
+        % store input
+        xt(:, t, j) = x;
+
+        % output at time t: y_t = C*h_t + D*x_t
+        y = C * h + D * x;
+        yt(:, t, j) = y;
+
+        % state update h_{t+1} = A*h_t + B*x_t
+        h = A * h + B * x;
+
+        % store h_{t+1} as h_t in ht (we store h1..hT)
+        ht(:, t, j) = h;
     end
-    % ----- Generate Gaussian noise xt -----
-    x = randn(m,1);          % mean 0, variance 1
 
-    % normalize to have l2 norm = 0.5
-    x = 0.5 * x / norm(x);
-
-    % store xt
-    xt(:,t) = x;
-
-    % ----- Compute yt = C h_t + D x_t -----
-    y = C*h + D*x;
-    yt(:,t) = y;
-
-    % ----- Compute h_{t+1} = A h_t + B x_t -----
-    h = A*h + B*x;
-
-    % store h_{t+1} (will be h(t))
+    % optional progress display every 10 sequences
+    if mod(j,10) == 0
+        fprintf('Completed %d / %d sequences\n', j, numSeqs);
+    end
 end
-toc
-% Save results (MAT format)
-save('JMLR data rand 2M 002.mat','xt','yt','-v7.3'); % -v7.3 allows to save files larger than 2GB
-disp('file saved')
+toc;
+
+% Save results
+outname = sprintf('JMLR_data_rand_%d_T%d.mat', numSeqs, T);
+save(outname, 'xt', 'yt', '-v7.3');
+fprintf('Saved %s (xt, yt)\n', outname);

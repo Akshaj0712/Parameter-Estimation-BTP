@@ -1,6 +1,6 @@
 %% This is the BATCH version
 %% import Hard_et_al_test_projection_quad.project_a_with_theta_constraints.m
-load('JMLR data rand 2M 002.mat');
+load('JMLR_data_rand_200000_T500.mat');
 x = xt;
 y = yt;
 
@@ -11,26 +11,25 @@ y = yt;
 
 % Parameters
 n = 2; % dimension of the system
-T = 100;
-mu = 0.0001; %from paper 
-N = int32(size(x,2)/T);
+T = 500;
+mu = 0.01; %from paper 
+N = 40e3;
 % Balpha =; %how do you set this?
-sigma = 1; % variance for the random sample of a 
+sigma = 0.1; % variance for the random sample of a 
 disp("ORIGINAL")
-a = sigma * randn(n,1); A = [ [zeros(n-1,1) eye(n-1)]; -flipud(a)' ]
+a = sigma * randn(n,1);  A = [ [zeros(n-1,1) eye(n-1)]; a' ]
 
 B = zeros(n, 1); B(n) = 1
 
 C = sigma * randn(n,1).'
 
-D = 0
+D = 0.5
 
-norm_clip = 100;
+norm_clip = 10;
 
 first = true;
 second = true;
 
-% --- NEW: batch settings ---
 batch_size = 100;            % number of sequences per gradient update
 if batch_size <= 0
     error('batch_size must be positive');
@@ -52,11 +51,11 @@ for j = 1:N
     global_step = global_step + 1;
     % FEED FORWARD
     h0 = zeros(n,1);
-    h = [(A*h0+B*x((j-1)*T + 1)).'];
-    y_est = [C*h(1,:).'+D*x((j-1)*T + 1)];
+    h = [(A*h0+B*x(1,1,j)).'];
+    y_est = [C*h0+D*x(1,1,j)];
     for i = 2:T
-        h(i,:) = A*h(i-1,:).' + B*x((j-1)*T + i);
-        y_est(i) = C*h(i,:).' + D*x((j-1)*T + i);
+        h(i,:) = A*h(i-1,:).' + B*x(1,i,j);
+        y_est(i) = C*h(i-1,:).' + D*x(1,i,j);
     end
 
     % BACK PROPAGATION for this one sequence
@@ -69,7 +68,7 @@ for j = 1:N
 
     for i = T:-1:1
         if (i > T1)
-            dy(i) = y_est(i) - y((j-1)*T + i);
+            dy(i) = y_est(i) - y(1,i,j);
         else
             dy(i) = 0;
         end
@@ -82,7 +81,7 @@ for j = 1:N
         else
             GA = GA - 1/(T - T1) * (dh(i,:).') * h0.';
         end
-        GD = GD + 1/(T - T1) * dy(i) * x((j-1)*T + i);
+        GD = GD + 1/(T - T1) * dy(i) * x(1,i,j);
     end
 
     % accumulate gradients into batch accumulators
@@ -91,24 +90,27 @@ for j = 1:N
     GD_acc = GD_acc + GD;
 
     batch_count = batch_count + 1;
-    last_dy = dy; % store last sequence residual (for plotting after loop)
-    global_loss(end+1) = norm(dy);
+    last_dy = dy(end); % store last sequence residual (for plotting after loop)
     % if batch full (or last sequence overall), apply update + projection
     if (batch_count == batch_size) || (j == N)
+        global_loss(end+1) = mean(abs(dy));
+        fprintf("Iteration %d of %d\n",j,N)
         % GRADIENT CLIPPING on the accumulated gradients
         Ga = GA_acc(n,:).'; % same extraction as before (n-th row -> a gradient)
         na = norm(Ga, 2);
+        if na > norm_clip
+            Ga = Ga * (norm_clip / na);
+            disp("A clipped")
+        end
         nC = norm(GC_acc, 2);
+        if nC > norm_clip
+            GC_acc = GC_acc * (norm_clip / nC);
+            disp("C clipped")
+        end
         nD = norm(GD_acc, 2);
-        gnorm = sqrt(na^2 + nC^2 + nD^2); % Combined L2 norm
-        if gnorm > norm_clip
-            scale = norm_clip / gnorm;
-            Ga = Ga * scale;
-            GC_acc = GC_acc * scale;
-            GD_acc = GD_acc * scale;
-        else
-            % If not clipped, Ga must reflect the unscaled accumulated GA_acc
-            Ga = GA_acc(n,:).';
+        if nD > norm_clip
+            GD_acc = GD_acc * (norm_clip / nD);
+            disp("D clipped")
         end
 
         % GRADIENT STEP: note we scale learning step by 1/batch_size to keep magnitude stable
@@ -118,8 +120,8 @@ for j = 1:N
         D = D - mu * (GD_acc / batch_count);
 
         % PROJECTION (apply to new a)
-        [a_proj, info] = Hard_et_al_test_projection_quad(a, 0.5, 2, 1, 0.5, 10, 240);
-        A = [ [zeros(n-1,1) eye(n-1)]; -flipud(a_proj)' ]; % reinstall a into A
+        [a_proj, info] = Hard_et_al_test_projection_quad(a, 0.5, 2, 8, 0.5, 2, 240);
+        A = [ [zeros(n-1,1) eye(n-1)]; -(a_proj)' ]; % reinstall a into A
 
         % Reset batch accumulators and counter
         GA_acc = zeros(n,n);
@@ -128,17 +130,19 @@ for j = 1:N
         batch_count = 0;
 
         % Update learning rate schedule based on progress (use global_step)
-        eps_tol = 1e-3;
-        v1 = 5*log(double(N))/6;
-        v2 = 11*log(double(N))/12;
+        eps_tol = 1e-1;
+        v1 = 2*N/3;
+        v2 = 5*N/6;
 
         if(abs(log(double(global_step)) - v1) < eps_tol && first)
             first = false;
-            mu = mu / 10;
+            mu = mu / 100;
+            disp("mu one-tenthed")
         end
-        if(abs(log(double(global_step)) - v2) < eps_tol && second)
+        if(abs(double(global_step) - v2) < eps_tol && second)
             second = false;
-            mu = mu / 10;
+            mu = mu / 100;
+            disp("mu one-tenthed")
         end
     end
 end
@@ -156,3 +160,9 @@ xlabel('Index');
 ylabel('dy');
 title('Plot of dy (batch-wise last sequence)');
 grid on;
+pause(10);
+
+% plot(1:size(global_loss,2), log(global_loss)/log(10));     % equivalent to log10(y)
+% xlabel('Index');
+% ylabel('log_{10}(y)');
+% grid on;
