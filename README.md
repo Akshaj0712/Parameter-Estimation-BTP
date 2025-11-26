@@ -1,5 +1,4 @@
 # Parameter-Estimation-BTP
-Script files to run Hard et. al. 2018
 
 MATLAB <br>
 **Hard_et_al_test**: Online learning pipeline, choose data input file and set hyperparameters before running (script file) <br>
